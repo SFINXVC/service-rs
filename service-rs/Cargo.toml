@@ -1,0 +1,11 @@
+[package]
+name = "service-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+service-rs_proc-macro = { path = "../service-rs_proc-macro", optional = true }
+
+[features]
+default = ["proc-macro"]
+proc-macro = ["service-rs_proc-macro"]

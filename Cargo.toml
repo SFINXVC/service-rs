@@ -1,0 +1,3 @@
+[workspace]
+members = ["service-rs", "service-rs_proc-macro"]
+resolver = "3"
