@@ -8,7 +8,6 @@ rustc-args = ["--cfg", "docsrs"]
 all-features = true
 
 [dependencies]
-async-trait = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 service-rs_proc-macro = { workspace = true, optional = true }
