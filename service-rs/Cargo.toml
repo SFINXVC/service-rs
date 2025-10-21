@@ -4,3 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+service-rs_proc-macro = { workspace = true, optional = true }
+
+[features]
+default = ["proc-macro"]
+proc-macro = ["service-rs_proc-macro"]

@@ -1,29 +1,71 @@
-// #[cfg(feature = "proc-macro")]
-// pub use service_rs_proc_macro::{add_scoped, add_singleton, add_transient};
+#![feature(unsize)]
+#![feature(coerce_unsized)]
 
 use std::{
     any::{Any, TypeId},
-    cell::RefCell,
     collections::HashMap,
-    rc::Rc,
+    future::Future,
+    pin::Pin,
+    sync::Arc,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum ServiceLifetime {
+use thiserror::Error;
+use tokio::sync::RwLock;
+
+#[cfg(feature = "proc-macro")]
+pub use service_rs_proc_macro::Injectable;
+
+#[cfg(feature = "proc-macro")]
+pub trait InjectableExtension: Sized + Send + Sync + 'static {
+    fn create_factory() -> ServiceFactory;
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ServiceLifetime {
     Singleton,
     Scoped,
     Transient,
 }
 
-pub type Injectable<T> = Rc<T>;
+#[derive(Debug, Error)]
+pub enum ServiceError {
+    #[error("Service with type '{type_name}' not found")]
+    ServiceNotFound { type_name: &'static str },
 
-type ServiceFactory =
-    Box<dyn Fn(&ServiceProvider) -> Result<Box<dyn Any>, Box<dyn std::error::Error>>>;
+    #[error("Service with type '{type_name}' already exists")]
+    ServiceAlreadyExists { type_name: &'static str },
 
-pub(crate) struct ServiceDescriptor {
-    pub(crate) lifetime: ServiceLifetime,
-    pub(crate) factory: ServiceFactory,
-    pub(crate) type_name: &'static str,
+    #[error("Service resolution failed for type '{type_name}'")]
+    ServiceResolutionFailed { type_name: &'static str },
+
+    #[error("Service initialization failed for type '{type_name}' with error: {error}")]
+    ServiceInitializationFailed {
+        type_name: &'static str,
+        error: Box<dyn std::error::Error>,
+    },
+
+    #[error(
+        "Service with type '{type_name}' is resolved under ServiceProvider, but it's lifetime is ServiceLifetime::Scoped"
+    )]
+    ServiceInvalidScope { type_name: &'static str },
+}
+
+pub type ServiceFactory = Box<
+    dyn Fn(
+            ServiceProviderContext,
+        ) -> Pin<
+            Box<
+                dyn Future<Output = Result<Box<dyn Any + Send + Sync>, Box<dyn std::error::Error>>>
+                    + Send,
+            >,
+        > + Send
+        + Sync,
+>;
+
+pub struct ServiceDescriptor {
+    pub lifetime: ServiceLifetime,
+    pub type_name: &'static str,
+    pub factory: ServiceFactory,
 }
 
 impl std::fmt::Debug for ServiceDescriptor {
@@ -37,310 +79,378 @@ impl std::fmt::Debug for ServiceDescriptor {
 
 #[derive(Debug, Default)]
 pub struct ServiceCollection {
-    pub(crate) services: HashMap<TypeId, ServiceDescriptor>,
+    pub services: HashMap<TypeId, ServiceDescriptor>,
 }
 
-#[derive(Debug, Default)]
-pub struct ServiceProvider {
-    pub(crate) collection: ServiceCollection,
-    pub(crate) services: RefCell<HashMap<TypeId, Rc<dyn Any>>>,
+#[derive(Clone)]
+pub enum ServiceProviderContext {
+    Root(Arc<ServiceProvider>),
+    Scoped(Arc<ScopedServiceProvider>),
 }
 
-#[derive(Debug, Default)]
-pub struct ScopedServiceProvider {
-    pub(crate) provider: Rc<ServiceProvider>,
-    pub(crate) services: RefCell<HashMap<TypeId, Rc<dyn Any>>>,
-}
-
-#[derive(Debug)]
-pub enum Error {
-    ServiceNotFound(String),
-    ServiceInitializationError(Box<dyn std::error::Error>),
-    InvalidScopeAccess(String),
-    Unknown(String),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ServiceProviderContext {
+    pub async fn get<T: Send + Sync + 'static>(&self) -> Result<Arc<T>, ServiceError> {
         match self {
-            Error::ServiceNotFound(service_name) => {
-                write!(f, "Service not found: {}", service_name)
-            }
-            Error::ServiceInitializationError(error) => {
-                write!(f, "Service initialization error: {}", error)
-            }
-            Error::InvalidScopeAccess(message) => {
-                write!(f, "Invalid scope access: {}", message)
-            }
-            Error::Unknown(message) => write!(f, "Unknown error: {}", message),
+            ServiceProviderContext::Root(provider) => provider.get::<T>().await,
+            ServiceProviderContext::Scoped(scoped) => scoped.get::<T>().await,
         }
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl From<Box<dyn std::error::Error>> for Error {
-    fn from(error: Box<dyn std::error::Error>) -> Self {
-        Error::ServiceInitializationError(error)
     }
 }
 
 impl ServiceCollection {
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn add_singleton_boxed<T: ?Sized + 'static, F>(&mut self, factory: F) -> &mut Self
-    where
-        F: Fn(&ServiceProvider) -> Result<Box<T>, Box<dyn std::error::Error>> + 'static,
-    {
-        let key = TypeId::of::<Box<T>>();
-        let type_name = std::any::type_name::<Box<T>>();
-
-        self.services.insert(
-            key,
-            ServiceDescriptor {
-                lifetime: ServiceLifetime::Singleton,
-                factory: Box::new(move |provider| {
-                    let result = factory(provider)?;
-                    Ok(Box::new(result) as Box<dyn Any>)
-                }),
-                type_name,
-            },
-        );
-
-        self
-    }
-
-    pub fn add_transient_boxed<T: ?Sized + 'static, F>(&mut self, factory: F) -> &mut Self
-    where
-        F: Fn(&ServiceProvider) -> Result<Box<T>, Box<dyn std::error::Error>> + 'static,
-    {
-        let key = TypeId::of::<Box<T>>();
-        let type_name = std::any::type_name::<Box<T>>();
-
-        self.services.insert(
-            key,
-            ServiceDescriptor {
-                lifetime: ServiceLifetime::Transient,
-                factory: Box::new(move |provider| {
-                    let result = factory(provider)?;
-                    Ok(Box::new(result) as Box<dyn Any>)
-                }),
-                type_name,
-            },
-        );
-
-        self
-    }
-
-    pub fn add_scoped_boxed<T: ?Sized + 'static, F>(&mut self, factory: F) -> &mut Self
-    where
-        F: Fn(&ServiceProvider) -> Result<Box<T>, Box<dyn std::error::Error>> + 'static,
-    {
-        let key = TypeId::of::<Box<T>>();
-        let type_name = std::any::type_name::<Box<T>>();
-
-        self.services.insert(
-            key,
-            ServiceDescriptor {
-                lifetime: ServiceLifetime::Scoped,
-                factory: Box::new(move |provider| {
-                    let result = factory(provider)?;
-                    Ok(Box::new(result) as Box<dyn Any>)
-                }),
-                type_name,
-            },
-        );
-
-        self
-    }
-
-    pub fn add_singleton<T: Any + 'static, F>(&mut self, factory: F) -> &mut Self
-    where
-        F: Fn(&ServiceProvider) -> Result<T, Box<dyn std::error::Error>> + 'static,
-    {
-        self.services.insert(
-            TypeId::of::<T>(),
-            ServiceDescriptor {
-                lifetime: ServiceLifetime::Singleton,
-                factory: Box::new(move |provider| {
-                    let result = factory(provider)?;
-                    Ok(Box::new(result) as Box<dyn Any>)
-                }),
-                type_name: std::any::type_name::<T>(),
-            },
-        );
-
-        self
-    }
-
-    pub fn add_transient<T: Any + 'static, F>(&mut self, factory: F) -> &mut Self
-    where
-        F: Fn(&ServiceProvider) -> Result<T, Box<dyn std::error::Error>> + 'static,
-    {
-        self.services.insert(
-            TypeId::of::<T>(),
-            ServiceDescriptor {
-                lifetime: ServiceLifetime::Transient,
-                factory: Box::new(move |provider| {
-                    let result = factory(provider)?;
-                    Ok(Box::new(result) as Box<dyn Any>)
-                }),
-                type_name: std::any::type_name::<T>(),
-            },
-        );
-
-        self
-    }
-
-    pub fn add_scoped<T: Any + 'static, F>(&mut self, factory: F) -> &mut Self
-    where
-        F: Fn(&ServiceProvider) -> Result<T, Box<dyn std::error::Error>> + 'static,
-    {
-        self.services.insert(
-            TypeId::of::<T>(),
-            ServiceDescriptor {
-                lifetime: ServiceLifetime::Scoped,
-                factory: Box::new(move |provider| {
-                    let result = factory(provider)?;
-                    Ok(Box::new(result) as Box<dyn Any>)
-                }),
-                type_name: std::any::type_name::<T>(),
-            },
-        );
-
-        self
-    }
-
-    pub fn build(self) -> ServiceProvider {
-        ServiceProvider {
-            collection: self,
-            services: RefCell::new(HashMap::new()),
+        Self {
+            services: HashMap::new(),
         }
     }
+
+    pub fn add_singleton_with_factory<T, F, Fut>(mut self, factory: F) -> Self
+    where
+        T: ?Sized + Send + Sync + 'static,
+        F: Fn(ServiceProviderContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Box<dyn Any + Send + Sync>, Box<dyn std::error::Error>>>
+            + Send
+            + 'static,
+    {
+        let type_id = TypeId::of::<T>();
+        let service = ServiceDescriptor {
+            lifetime: ServiceLifetime::Singleton,
+            type_name: std::any::type_name::<T>(),
+            factory: Box::new(move |ctx: ServiceProviderContext| Box::pin(factory(ctx))),
+        };
+        self.services.insert(type_id, service);
+        self
+    }
+
+    pub fn add_scoped_with_factory<T, F, Fut>(mut self, factory: F) -> Self
+    where
+        T: ?Sized + Send + Sync + 'static,
+        F: Fn(ServiceProviderContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Box<dyn Any + Send + Sync>, Box<dyn std::error::Error>>>
+            + Send
+            + 'static,
+    {
+        let type_id = TypeId::of::<T>();
+        let service = ServiceDescriptor {
+            lifetime: ServiceLifetime::Scoped,
+            type_name: std::any::type_name::<T>(),
+            factory: Box::new(move |ctx: ServiceProviderContext| Box::pin(factory(ctx))),
+        };
+        self.services.insert(type_id, service);
+        self
+    }
+
+    pub fn add_transient_with_factory<T, F, Fut>(mut self, factory: F) -> Self
+    where
+        T: ?Sized + Send + Sync + 'static,
+        F: Fn(ServiceProviderContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Box<dyn Any + Send + Sync>, Box<dyn std::error::Error>>>
+            + Send
+            + 'static,
+    {
+        let type_id = TypeId::of::<T>();
+        let service = ServiceDescriptor {
+            lifetime: ServiceLifetime::Transient,
+            type_name: std::any::type_name::<T>(),
+            factory: Box::new(move |ctx: ServiceProviderContext| Box::pin(factory(ctx))),
+        };
+        self.services.insert(type_id, service);
+        self
+    }
+
+    #[cfg(feature = "proc-macro")]
+    pub fn add_singleton<T>(mut self) -> Self
+    where
+        T: InjectableExtension,
+    {
+        let type_id = TypeId::of::<T>();
+        let service = ServiceDescriptor {
+            lifetime: ServiceLifetime::Singleton,
+            type_name: std::any::type_name::<T>(),
+            factory: T::create_factory(),
+        };
+        self.services.insert(type_id, service);
+        self
+    }
+
+    #[cfg(feature = "proc-macro")]
+    pub fn add_scoped<T>(mut self) -> Self
+    where
+        T: InjectableExtension,
+    {
+        let type_id = TypeId::of::<T>();
+        let service = ServiceDescriptor {
+            lifetime: ServiceLifetime::Scoped,
+            type_name: std::any::type_name::<T>(),
+            factory: T::create_factory(),
+        };
+        self.services.insert(type_id, service);
+        self
+    }
+
+    #[cfg(feature = "proc-macro")]
+    pub fn add_transient<T>(mut self) -> Self
+    where
+        T: InjectableExtension,
+    {
+        let type_id = TypeId::of::<T>();
+        let service = ServiceDescriptor {
+            lifetime: ServiceLifetime::Transient,
+            type_name: std::any::type_name::<T>(),
+            factory: T::create_factory(),
+        };
+        self.services.insert(type_id, service);
+        self
+    }
+
+    #[cfg(feature = "proc-macro")]
+    pub fn add_singleton_interface<T, TImpl>(mut self) -> Self
+    where
+        T: ?Sized + Send + Sync + 'static,
+        TImpl: InjectableExtension + Unpin + 'static + std::marker::Unsize<T>,
+    {
+        let type_id = TypeId::of::<Box<T>>();
+        let impl_factory = Arc::new(TImpl::create_factory());
+        let service = ServiceDescriptor {
+            lifetime: ServiceLifetime::Singleton,
+            type_name: std::any::type_name::<Box<T>>(),
+            factory: Box::new(move |ctx: ServiceProviderContext| {
+                let impl_factory = Arc::clone(&impl_factory);
+                Box::pin(async move {
+                    let concrete = impl_factory(ctx).await?;
+                    let downcasted = concrete.downcast::<TImpl>().map_err(|_| {
+                        Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Failed to downcast",
+                        )) as Box<dyn std::error::Error>
+                    })?;
+                    let trait_obj: Box<T> = downcasted;
+                    Ok(Box::new(trait_obj) as Box<dyn Any + Send + Sync>)
+                })
+            }),
+        };
+        self.services.insert(type_id, service);
+        self
+    }
+
+    #[cfg(feature = "proc-macro")]
+    pub fn add_scoped_interface<T, TImpl>(mut self) -> Self
+    where
+        T: ?Sized + Send + Sync + 'static,
+        TImpl: InjectableExtension + Unpin + 'static + std::marker::Unsize<T>,
+    {
+        let type_id = TypeId::of::<Box<T>>();
+        let impl_factory = Arc::new(TImpl::create_factory());
+        let service = ServiceDescriptor {
+            lifetime: ServiceLifetime::Scoped,
+            type_name: std::any::type_name::<Box<T>>(),
+            factory: Box::new(move |ctx: ServiceProviderContext| {
+                let impl_factory = Arc::clone(&impl_factory);
+                Box::pin(async move {
+                    let concrete = impl_factory(ctx).await?;
+                    let downcasted = concrete.downcast::<TImpl>().map_err(|_| {
+                        Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Failed to downcast",
+                        )) as Box<dyn std::error::Error>
+                    })?;
+                    let trait_obj: Box<T> = downcasted;
+                    Ok(Box::new(trait_obj) as Box<dyn Any + Send + Sync>)
+                })
+            }),
+        };
+        self.services.insert(type_id, service);
+        self
+    }
+
+    #[cfg(feature = "proc-macro")]
+    pub fn add_transient_interface<T, TImpl>(mut self) -> Self
+    where
+        T: ?Sized + Send + Sync + 'static,
+        TImpl: InjectableExtension + Unpin + 'static + std::marker::Unsize<T>,
+    {
+        let type_id = TypeId::of::<Box<T>>();
+        let impl_factory = Arc::new(TImpl::create_factory());
+        let service = ServiceDescriptor {
+            lifetime: ServiceLifetime::Transient,
+            type_name: std::any::type_name::<Box<T>>(),
+            factory: Box::new(move |ctx: ServiceProviderContext| {
+                let impl_factory = Arc::clone(&impl_factory);
+                Box::pin(async move {
+                    let concrete = impl_factory(ctx).await?;
+                    let downcasted = concrete.downcast::<TImpl>().map_err(|_| {
+                        Box::new(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Failed to downcast",
+                        )) as Box<dyn std::error::Error>
+                    })?;
+                    let trait_obj: Box<T> = downcasted;
+                    Ok(Box::new(trait_obj) as Box<dyn Any + Send + Sync>)
+                })
+            }),
+        };
+        self.services.insert(type_id, service);
+        self
+    }
+
+    pub fn len(&self) -> usize {
+        self.services.len()
+    }
+
+    pub fn build(self) -> Arc<ServiceProvider> {
+        Arc::new(ServiceProvider {
+            collection: self,
+            services: RwLock::new(HashMap::new()),
+        })
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ServiceProvider {
+    pub collection: ServiceCollection,
+    pub services: RwLock<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
 }
 
 impl ServiceProvider {
-    pub fn create_scope(self: &Rc<Self>) -> ScopedServiceProvider {
-        ScopedServiceProvider {
-            provider: self.clone(),
-            services: RefCell::new(HashMap::new()),
-        }
+    pub fn create_scope(self: &Arc<Self>) -> Arc<ScopedServiceProvider> {
+        Arc::new(ScopedServiceProvider {
+            provider: Arc::clone(self),
+            services: RwLock::new(HashMap::new()),
+        })
     }
 
-    pub fn get_boxed<T: ?Sized + Any + 'static>(&self) -> Result<Rc<Box<T>>, Error> {
-        self.get::<Box<T>>()
-    }
-
-    pub fn get<T: Any + 'static>(&self) -> Result<Injectable<T>, Error> {
+    pub async fn get<T>(self: &Arc<Self>) -> Result<Arc<T>, ServiceError>
+    where
+        T: Send + Sync + 'static,
+    {
         let type_id = TypeId::of::<T>();
-        let type_name = std::any::type_name::<T>();
 
-        let lifetime = self
-            .collection
-            .services
-            .get(&type_id)
-            .ok_or_else(|| Error::ServiceNotFound(type_name.to_string()))?
-            .lifetime
-            .clone();
+        // lookup from collection
+        let descriptor = self.collection.services.get(&type_id).map_or_else(
+            || {
+                Err(ServiceError::ServiceNotFound {
+                    type_name: std::any::type_name::<T>(),
+                })
+            },
+            |service| Ok(service),
+        )?;
 
-        match lifetime {
+        match descriptor.lifetime {
             ServiceLifetime::Singleton => {
-                if let Some(service) = self.services.borrow().get(&type_id) {
-                    return service
-                        .clone()
-                        .downcast::<T>()
-                        .map_err(|_| Error::ServiceNotFound(type_name.to_string()));
-                } else {
-                    let instance = self
-                        .collection
-                        .services
-                        .get(&type_id)
-                        .ok_or_else(|| Error::ServiceNotFound(type_name.to_string()))?
-                        .factory
-                        .as_ref()(self)
-                    .map_err(|e| Error::Unknown(e.to_string()))?;
-
-                    let rc_any = Rc::<dyn Any>::from(instance);
-
-                    self.services.borrow_mut().insert(type_id, rc_any.clone());
-
-                    rc_any
-                        .downcast::<T>()
-                        .map_err(|_| Error::ServiceNotFound(type_name.to_string()))
+                if let Some(service) = self.services.read().await.get(&type_id) {
+                    let cloned = Arc::clone(service);
+                    return cloned.downcast::<T>().map_err(|_| {
+                        ServiceError::ServiceResolutionFailed {
+                            type_name: std::any::type_name::<T>(),
+                        }
+                    });
                 }
+
+                let service = (descriptor.factory)(ServiceProviderContext::Root(Arc::clone(self)))
+                    .await
+                    .map_err(|e| ServiceError::ServiceInitializationFailed {
+                        type_name: std::any::type_name::<T>(),
+                        error: e,
+                    })?;
+
+                let arc_service: Arc<dyn Any + Send + Sync> = Arc::from(service);
+
+                self.services
+                    .write()
+                    .await
+                    .insert(type_id, Arc::clone(&arc_service));
+
+                return arc_service.downcast::<T>().map_err(|_| {
+                    ServiceError::ServiceResolutionFailed {
+                        type_name: std::any::type_name::<T>(),
+                    }
+                });
             }
+            ServiceLifetime::Scoped => Err(ServiceError::ServiceInvalidScope {
+                type_name: std::any::type_name::<T>(),
+            }),
             ServiceLifetime::Transient => {
-                let instance = self
-                    .collection
-                    .services
-                    .get(&type_id)
-                    .ok_or_else(|| Error::ServiceNotFound(type_name.to_string()))?
-                    .factory
-                    .as_ref()(self)
-                .map_err(|e| Error::Unknown(e.to_string()))?;
+                let service = (descriptor.factory)(ServiceProviderContext::Root(Arc::clone(self)))
+                    .await
+                    .map_err(|e| ServiceError::ServiceInitializationFailed {
+                        type_name: std::any::type_name::<T>(),
+                        error: e,
+                    })?;
 
-                let rc_any = Rc::<dyn Any>::from(instance);
+                let arc_service: Arc<dyn Any + Send + Sync> = Arc::from(service);
 
-                rc_any
-                    .downcast::<T>()
-                    .map_err(|_| Error::ServiceNotFound(type_name.to_string()))
+                return arc_service.downcast::<T>().map_err(|_| {
+                    ServiceError::ServiceResolutionFailed {
+                        type_name: std::any::type_name::<T>(),
+                    }
+                });
             }
-            ServiceLifetime::Scoped => Err(Error::InvalidScopeAccess(format!(
-                "Cannot resolve scoped service '{}' from root provider. Use create_scope() to create a scoped provider.",
-                type_name
-            ))),
         }
     }
 }
 
+#[derive(Debug, Default)]
+pub struct ScopedServiceProvider {
+    pub provider: Arc<ServiceProvider>,
+    pub services: RwLock<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
+}
+
 impl ScopedServiceProvider {
-    pub fn get_boxed<T: ?Sized + Any + 'static>(&self) -> Result<Injectable<Box<T>>, Error> {
-        self.get::<Box<T>>()
-    }
-
-    pub fn get<T: Any + 'static>(&self) -> Result<Injectable<T>, Error> {
+    pub async fn get<T>(self: &Arc<Self>) -> Result<Arc<T>, ServiceError>
+    where
+        T: Send + Sync + 'static,
+    {
         let type_id = TypeId::of::<T>();
-        let type_name = std::any::type_name::<T>();
 
-        let lifetime = self
+        // lookup from collection
+        let descriptor = self
             .provider
             .collection
             .services
             .get(&type_id)
-            .ok_or_else(|| Error::ServiceNotFound(type_name.to_string()))?
-            .lifetime
-            .clone();
+            .map_or_else(
+                || {
+                    Err(ServiceError::ServiceNotFound {
+                        type_name: std::any::type_name::<T>(),
+                    })
+                },
+                |service| Ok(service),
+            )?;
 
-        match lifetime {
+        match descriptor.lifetime {
+            ServiceLifetime::Singleton => self.provider.get::<T>().await,
             ServiceLifetime::Scoped => {
-                if let Some(service) = self.services.borrow().get(&type_id) {
-                    return service
-                        .clone()
-                        .downcast::<T>()
-                        .map_err(|_| Error::ServiceNotFound(type_name.to_string()));
-                } else {
-                    let instance = self
-                        .provider
-                        .collection
-                        .services
-                        .get(&type_id)
-                        .ok_or_else(|| Error::ServiceNotFound(type_name.to_string()))?
-                        .factory
-                        .as_ref()(&self.provider)
-                    .map_err(|e| Error::Unknown(e.to_string()))?;
-
-                    let rc_any = Rc::<dyn Any>::from(instance);
-
-                    self.services.borrow_mut().insert(type_id, rc_any.clone());
-
-                    rc_any
-                        .downcast::<T>()
-                        .map_err(|_| Error::ServiceNotFound(type_name.to_string()))
+                if let Some(service) = self.services.read().await.get(&type_id) {
+                    let cloned = Arc::clone(service);
+                    return cloned.downcast::<T>().map_err(|_| {
+                        ServiceError::ServiceResolutionFailed {
+                            type_name: std::any::type_name::<T>(),
+                        }
+                    });
                 }
+
+                let service =
+                    (descriptor.factory)(ServiceProviderContext::Scoped(Arc::clone(self)))
+                        .await
+                        .map_err(|e| ServiceError::ServiceInitializationFailed {
+                            type_name: std::any::type_name::<T>(),
+                            error: e,
+                        })?;
+
+                let arc_service: Arc<dyn Any + Send + Sync> = Arc::from(service);
+
+                self.services
+                    .write()
+                    .await
+                    .insert(type_id, Arc::clone(&arc_service));
+
+                return arc_service.downcast::<T>().map_err(|_| {
+                    ServiceError::ServiceResolutionFailed {
+                        type_name: std::any::type_name::<T>(),
+                    }
+                });
             }
-            _ => self.provider.get::<T>(),
+            ServiceLifetime::Transient => self.provider.get::<T>().await,
         }
     }
 }
