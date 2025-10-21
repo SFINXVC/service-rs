@@ -2,6 +2,14 @@
 name = "service-rs"
 version = "0.1.0"
 edition = "2024"
+authors = ["SFINXVC"]
+description = "An async-first, lightweight dependency injection container for Rust"
+license = "MIT"
+repository = "https://github.com/SFINXVC/service-rs"
+documentation = "https://docs.rs/service-rs"
+readme = "../README.md"
+keywords = ["dependency-injection", "di", "async", "service-container", "ioc"]
+categories = ["asynchronous", "development-tools"]
 
 [package.metadata.docs.rs]
 rustc-args = ["--cfg", "docsrs"]
@@ -10,7 +18,7 @@ all-features = true
 [dependencies]
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-service-rs_proc-macro = { workspace = true, optional = true }
+service-rs_proc-macro = { version = "0.1.0", path = "../service-rs_proc-macro", optional = true }
 
 [features]
 default = ["proc-macro"]

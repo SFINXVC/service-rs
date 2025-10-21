@@ -2,6 +2,13 @@
 name = "service-rs_proc-macro"
 version = "0.1.0"
 edition = "2024"
+authors = ["SFINXVC"]
+description = "Procedural macros for service-rs dependency injection container"
+license = "MIT"
+repository = "https://github.com/SFINXVC/service-rs"
+documentation = "https://docs.rs/service-rs_proc-macro"
+keywords = ["dependency-injection", "di", "macro", "derive"]
+categories = ["development-tools"]
 
 [lib]
 proc-macro = true
