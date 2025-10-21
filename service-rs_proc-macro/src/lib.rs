@@ -1,6 +1,119 @@
 use proc_macro::TokenStream;
 use syn::{Data, DeriveInput};
 
+/// Derives the `Injectable` trait for automatic dependency injection.
+///
+/// This procedural macro generates a constructor and implements the `InjectableExtension` trait,
+/// enabling automatic dependency resolution through the service container.
+///
+/// # Requirements
+///
+/// - All fields must be wrapped in `Arc<T>` where `T` is a registered service type
+/// - The struct must have named fields or be a unit struct
+/// - All dependency types must be resolvable from the service provider
+///
+/// # Generated Code
+///
+/// The macro generates:
+/// 1. A `new` constructor that accepts all dependencies as parameters
+/// 2. An `InjectableExtension` implementation with a factory function that:
+///    - Resolves each dependency from the service provider context
+///    - Constructs the type with resolved dependencies
+///    - Returns a boxed instance
+///
+/// # Examples
+///
+/// ## Basic Usage with Dependencies
+///
+/// ```rust
+/// use service_rs::{Injectable, ServiceCollection};
+/// use std::sync::Arc;
+///
+/// #[derive(Injectable)]
+/// struct DatabaseService {
+///     connection_pool: Arc<ConnectionPool>,
+///     logger: Arc<Logger>,
+/// }
+///
+/// // Generated code (conceptual):
+/// // impl DatabaseService {
+/// //     pub fn new(connection_pool: Arc<ConnectionPool>, logger: Arc<Logger>) -> Self {
+/// //         Self { connection_pool, logger }
+/// //     }
+/// // }
+/// ```
+///
+/// ## Unit Struct (No Dependencies)
+///
+/// ```rust
+/// use service_rs::Injectable;
+///
+/// #[derive(Injectable)]
+/// struct SimpleService;
+///
+/// // Generated code (conceptual):
+/// // impl SimpleService {
+/// //     pub fn new() -> Self {
+/// //         Self
+/// //     }
+/// // }
+/// ```
+///
+/// ## Registration with Service Collection
+///
+/// ```rust
+/// use service_rs::{Injectable, ServiceCollection};
+/// use std::sync::Arc;
+///
+/// #[derive(Injectable)]
+/// struct MyService {
+///     dependency: Arc<i32>,
+/// }
+///
+/// let collection = ServiceCollection::new()
+///     .add_singleton_with_factory::<i32, _, _>(|_| async {
+///         Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
+///     })
+///     .add_singleton::<MyService>(); // Uses Injectable
+/// ```
+///
+/// # Compile-Time Errors
+///
+/// The macro will produce compile errors if:
+///
+/// - Fields are not wrapped in `Arc<T>`:
+///   ```compile_fail
+///   #[derive(Injectable)]
+///   struct BadService {
+///       field: String, // Error: must be Arc<String>
+///   }
+///   ```
+///
+/// - Used on enums:
+///   ```compile_fail
+///   #[derive(Injectable)]
+///   enum BadEnum { Variant } // Error: Injectable only works with structs
+///   ```
+///
+/// - Used with unnamed fields:
+///   ```compile_fail
+///   #[derive(Injectable)]
+///   struct BadService(Arc<String>); // Error: must use named fields
+///   ```
+///
+/// # Runtime Behavior
+///
+/// When a service is resolved:
+/// 1. The factory function is called with a `ServiceProviderContext`
+/// 2. Each dependency is resolved asynchronously via `ctx.get::<T>()`
+/// 3. If any dependency fails to resolve, an error is propagated
+/// 4. On success, the constructor is called with all resolved dependencies
+///
+/// # Performance Notes
+///
+/// - Dependencies are resolved lazily when the service is first requested
+/// - `Arc<T>` provides efficient reference counting for shared ownership
+/// - Async resolution allows for non-blocking initialization
 #[proc_macro_derive(Injectable)]
 pub fn derive_injectable(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as DeriveInput);

@@ -5,7 +5,6 @@ members = ["service-rs", "service-rs_proc-macro"]
 [workspace.dependencies]
 thiserror = "2.0.17"
 tokio = "1.48.0"
-async-trait = "0.1.89"
 quote = "1.0.41"
 service-rs_proc-macro = { path = "service-rs_proc-macro" }
 syn = "2.0.107"

@@ -3,6 +3,10 @@ name = "service-rs"
 version = "0.1.0"
 edition = "2024"
 
+[package.metadata.docs.rs]
+rustc-args = ["--cfg", "docsrs"]
+all-features = true
+
 [dependencies]
 async-trait = { workspace = true }
 thiserror = { workspace = true }
