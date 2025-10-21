@@ -63,9 +63,9 @@ pub type ServiceFactory = Box<
 >;
 
 pub struct ServiceDescriptor {
-    pub lifetime: ServiceLifetime,
-    pub type_name: &'static str,
-    pub factory: ServiceFactory,
+    pub(crate) lifetime: ServiceLifetime,
+    pub(crate) type_name: &'static str,
+    pub(crate) factory: ServiceFactory,
 }
 
 impl std::fmt::Debug for ServiceDescriptor {
@@ -79,7 +79,7 @@ impl std::fmt::Debug for ServiceDescriptor {
 
 #[derive(Debug, Default)]
 pub struct ServiceCollection {
-    pub services: HashMap<TypeId, ServiceDescriptor>,
+    pub(crate) services: HashMap<TypeId, ServiceDescriptor>,
 }
 
 #[derive(Clone)]
@@ -307,8 +307,8 @@ impl ServiceCollection {
 
 #[derive(Debug, Default)]
 pub struct ServiceProvider {
-    pub collection: ServiceCollection,
-    pub services: RwLock<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
+    pub(crate) collection: ServiceCollection,
+    pub(crate) services: RwLock<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
 }
 
 impl ServiceProvider {
@@ -391,8 +391,8 @@ impl ServiceProvider {
 
 #[derive(Debug, Default)]
 pub struct ScopedServiceProvider {
-    pub provider: Arc<ServiceProvider>,
-    pub services: RwLock<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
+    pub(crate) provider: Arc<ServiceProvider>,
+    pub(crate) services: RwLock<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
 }
 
 impl ScopedServiceProvider {
