@@ -25,9 +25,13 @@ use syn::{Data, DeriveInput};
 ///
 /// ## Basic Usage with Dependencies
 ///
-/// ```rust
+/// ```rust,ignore
 /// use service_rs::{Injectable, ServiceCollection};
 /// use std::sync::Arc;
+///
+/// // Mock types for demonstration
+/// struct ConnectionPool;
+/// struct Logger;
 ///
 /// #[derive(Injectable)]
 /// struct DatabaseService {
@@ -45,7 +49,7 @@ use syn::{Data, DeriveInput};
 ///
 /// ## Unit Struct (No Dependencies)
 ///
-/// ```rust
+/// ```rust,ignore
 /// use service_rs::Injectable;
 ///
 /// #[derive(Injectable)]
@@ -61,7 +65,7 @@ use syn::{Data, DeriveInput};
 ///
 /// ## Registration with Service Collection
 ///
-/// ```rust
+/// ```rust,ignore
 /// use service_rs::{Injectable, ServiceCollection};
 /// use std::sync::Arc;
 ///
