@@ -654,6 +654,64 @@ impl ServiceProvider {
         })
     }
 
+    /// Returns the number of resolved service instances currently cached in the provider.
+    ///
+    /// This count includes singleton services that have been instantiated.
+    /// It does not include services that are registered but not yet resolved.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use service_rs::ServiceCollection;
+    ///
+    /// # async fn example() {
+    /// let provider = ServiceCollection::new().build();
+    /// let count = provider.len().await;
+    /// # }
+    /// ```
+    pub async fn len(&self) -> usize {
+        self.services.read().await.len()
+    }
+
+    /// Returns the total number of registered service types in the collection.
+    ///
+    /// This count includes all registered services regardless of whether they have been resolved.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use service_rs::ServiceCollection;
+    ///
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_singleton_with_factory::<i32, _, _>(|_| async {
+    ///     Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
+    /// });
+    /// let provider = collection.build();
+    /// assert_eq!(provider.collection_len(), 1);
+    /// ```
+    pub fn collection_len(&self) -> usize {
+        self.collection.len()
+    }
+
+    /// Returns `true` if no service instances have been resolved yet.
+    ///
+    /// This checks whether the provider's instance cache is empty, not whether
+    /// services are registered in the collection.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use service_rs::ServiceCollection;
+    ///
+    /// # async fn example() {
+    /// let provider = ServiceCollection::new().build();
+    /// assert!(provider.is_empty().await);
+    /// # }
+    /// ```
+    pub async fn is_empty(&self) -> bool {
+        self.services.read().await.is_empty()
+    }
+
     /// Resolves a service from the provider.
     ///
     /// Returns an [`Arc<T>`] containing the resolved service instance.
