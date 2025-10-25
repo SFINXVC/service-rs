@@ -39,13 +39,13 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
-    let collection = ServiceCollection::new()
-        .add_singleton_with_factory::<i32, _, _>(|_| async {
-            Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
-        })
-        .add_transient_with_factory::<String, _, _>(|_| async {
-            Ok(Box::new("Hello".to_string()) as Box<dyn std::any::Any + Send + Sync>)
-        });
+    let mut collection = ServiceCollection::new();
+    collection.add_singleton_with_factory::<i32, _, _>(|_| async {
+        Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
+    });
+    collection.add_transient_with_factory::<String, _, _>(|_| async {
+        Ok(Box::new("Hello".to_string()) as Box<dyn std::any::Any + Send + Sync>)
+    });
 
     let provider = collection.build();
 
@@ -80,13 +80,13 @@ struct UserService {
 
 #[tokio::main]
 async fn main() {
-    let collection = ServiceCollection::new()
-        .add_singleton_with_factory::<Database, _, _>(|_| async {
-            Ok(Box::new(Database {
-                connection_string: "localhost:5432".to_string(),
-            }) as Box<dyn std::any::Any + Send + Sync>)
-        })
-        .add_scoped::<UserService>();
+    let mut collection = ServiceCollection::new();
+    collection.add_singleton_with_factory::<Database, _, _>(|_| async {
+        Ok(Box::new(Database {
+            connection_string: "localhost:5432".to_string(),
+        }) as Box<dyn std::any::Any + Send + Sync>)
+    });
+    collection.add_scoped::<UserService>();
 
     let provider = collection.build();
     let scope = provider.create_scope();
@@ -110,12 +110,12 @@ struct RequestContext {
 
 #[tokio::main]
 async fn main() {
-    let collection = ServiceCollection::new()
-        .add_scoped_with_factory::<RequestContext, _, _>(|_| async {
-            Ok(Box::new(RequestContext {
-                request_id: uuid::Uuid::new_v4().to_string(),
-            }) as Box<dyn std::any::Any + Send + Sync>)
-        });
+    let mut collection = ServiceCollection::new();
+    collection.add_scoped_with_factory::<RequestContext, _, _>(|_| async {
+        Ok(Box::new(RequestContext {
+            request_id: uuid::Uuid::new_v4().to_string(),
+        }) as Box<dyn std::any::Any + Send + Sync>)
+    });
 
     let provider = collection.build();
 
@@ -155,8 +155,8 @@ impl Logger for ConsoleLogger {
 
 #[tokio::main]
 async fn main() {
-    let collection = ServiceCollection::new()
-        .add_singleton_interface::<dyn Logger, ConsoleLogger>();
+    let mut collection = ServiceCollection::new();
+    collection.add_singleton_interface::<dyn Logger, ConsoleLogger>();
 
     let provider = collection.build();
 
@@ -170,19 +170,19 @@ async fn main() {
 ### ServiceCollection Methods
 
 **Factory-based registration:**
-- `add_singleton_with_factory<T, F, Fut>(factory: F) -> Self`
-- `add_scoped_with_factory<T, F, Fut>(factory: F) -> Self`
-- `add_transient_with_factory<T, F, Fut>(factory: F) -> Self`
+- `add_singleton_with_factory<T, F, Fut>(&mut self, factory: F) -> &mut Self`
+- `add_scoped_with_factory<T, F, Fut>(&mut self, factory: F) -> &mut Self`
+- `add_transient_with_factory<T, F, Fut>(&mut self, factory: F) -> &mut Self`
 
 **Injectable-based registration (requires `proc-macro` feature):**
-- `add_singleton<T: Injectable>() -> Self`
-- `add_scoped<T: Injectable>() -> Self`
-- `add_transient<T: Injectable>() -> Self`
+- `add_singleton<T: Injectable>(&mut self) -> &mut Self`
+- `add_scoped<T: Injectable>(&mut self) -> &mut Self`
+- `add_transient<T: Injectable>(&mut self) -> &mut Self`
 
 **Interface registration (requires `proc-macro` feature):**
-- `add_singleton_interface<T: ?Sized, TImpl: Injectable>() -> Self`
-- `add_scoped_interface<T: ?Sized, TImpl: Injectable>() -> Self`
-- `add_transient_interface<T: ?Sized, TImpl: Injectable>() -> Self`
+- `add_singleton_interface<T: ?Sized, TImpl: Injectable>(&mut self) -> &mut Self`
+- `add_scoped_interface<T: ?Sized, TImpl: Injectable>(&mut self) -> &mut Self`
+- `add_transient_interface<T: ?Sized, TImpl: Injectable>(&mut self) -> &mut Self`
 
 **Build:**
 - `build(self) -> Arc<ServiceProvider>`

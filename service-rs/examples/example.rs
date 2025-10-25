@@ -50,19 +50,19 @@ impl SomeInterface for SomeInterfaceImpl {
 
 #[tokio::main]
 async fn main() {
-    let collection = ServiceCollection::new()
-        .add_singleton_with_factory::<i32, _, _>(|_| async {
-            Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
-        })
-        .add_transient_with_factory::<SomeStringWrapper, _, _>(|_| async {
-            Ok(Box::new(SomeStringWrapper("Hello".to_string()))
-                as Box<dyn std::any::Any + Send + Sync>)
-        })
-        .add_scoped_with_factory::<TestDep, _, _>(|_| async {
-            Ok(Box::new(TestDep(42)) as Box<dyn std::any::Any + Send + Sync>)
-        })
-        .add_scoped::<DependingDeps>()
-        .add_scoped_interface::<dyn SomeInterface, SomeInterfaceImpl>();
+    let mut collection = ServiceCollection::new();
+    collection.add_singleton_with_factory::<i32, _, _>(|_| async {
+        Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
+    });
+    collection.add_transient_with_factory::<SomeStringWrapper, _, _>(|_| async {
+        Ok(Box::new(SomeStringWrapper("Hello".to_string()))
+            as Box<dyn std::any::Any + Send + Sync>)
+    });
+    collection.add_scoped_with_factory::<TestDep, _, _>(|_| async {
+        Ok(Box::new(TestDep(42)) as Box<dyn std::any::Any + Send + Sync>)
+    });
+    collection.add_scoped::<DependingDeps>();
+    collection.add_scoped_interface::<dyn SomeInterface, SomeInterfaceImpl>();
 
     println!("Successfully registered {} services", collection.len());
 

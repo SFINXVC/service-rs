@@ -28,10 +28,10 @@
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let collection = ServiceCollection::new()
-//!         .add_singleton_with_factory::<i32, _, _>(|_| async {
-//!             Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
-//!         });
+//!     let mut collection = ServiceCollection::new();
+//!     collection.add_singleton_with_factory::<i32, _, _>(|_| async {
+//!         Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
+//!     });
 //!
 //!     let provider = collection.build();
 //!     let num: Arc<i32> = provider.get::<i32>().await.unwrap();
@@ -162,10 +162,10 @@ impl std::fmt::Debug for ServiceDescriptor {
 /// ```no_run
 /// use service_rs::ServiceCollection;
 ///
-/// let collection = ServiceCollection::new()
-///     .add_singleton_with_factory::<i32, _, _>(|_| async {
-///         Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
-///     });
+/// let mut collection = ServiceCollection::new();
+/// collection.add_singleton_with_factory::<i32, _, _>(|_| async {
+///     Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
+/// });
 ///
 /// let provider = collection.build();
 /// ```
@@ -218,12 +218,12 @@ impl ServiceCollection {
     /// ```no_run
     /// use service_rs::ServiceCollection;
     ///
-    /// let collection = ServiceCollection::new()
-    ///     .add_singleton_with_factory::<i32, _, _>(|_| async {
-    ///         Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
-    ///     });
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_singleton_with_factory::<i32, _, _>(|_| async {
+    ///     Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
+    /// });
     /// ```
-    pub fn add_singleton_with_factory<T, F, Fut>(mut self, factory: F) -> Self
+    pub fn add_singleton_with_factory<T, F, Fut>(&mut self, factory: F) -> &mut Self
     where
         T: ?Sized + Send + Sync + 'static,
         F: Fn(ServiceProviderContext) -> Fut + Send + Sync + 'static,
@@ -251,12 +251,12 @@ impl ServiceCollection {
     /// ```no_run
     /// use service_rs::ServiceCollection;
     ///
-    /// let collection = ServiceCollection::new()
-    ///     .add_scoped_with_factory::<String, _, _>(|_| async {
-    ///         Ok(Box::new("scoped".to_string()) as Box<dyn std::any::Any + Send + Sync>)
-    ///     });
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_scoped_with_factory::<String, _, _>(|_| async {
+    ///     Ok(Box::new("scoped".to_string()) as Box<dyn std::any::Any + Send + Sync>)
+    /// });
     /// ```
-    pub fn add_scoped_with_factory<T, F, Fut>(mut self, factory: F) -> Self
+    pub fn add_scoped_with_factory<T, F, Fut>(&mut self, factory: F) -> &mut Self
     where
         T: ?Sized + Send + Sync + 'static,
         F: Fn(ServiceProviderContext) -> Fut + Send + Sync + 'static,
@@ -283,12 +283,12 @@ impl ServiceCollection {
     /// ```no_run
     /// use service_rs::ServiceCollection;
     ///
-    /// let collection = ServiceCollection::new()
-    ///     .add_transient_with_factory::<String, _, _>(|_| async {
-    ///         Ok(Box::new("transient".to_string()) as Box<dyn std::any::Any + Send + Sync>)
-    ///     });
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_transient_with_factory::<String, _, _>(|_| async {
+    ///     Ok(Box::new("transient".to_string()) as Box<dyn std::any::Any + Send + Sync>)
+    /// });
     /// ```
-    pub fn add_transient_with_factory<T, F, Fut>(mut self, factory: F) -> Self
+    pub fn add_transient_with_factory<T, F, Fut>(&mut self, factory: F) -> &mut Self
     where
         T: ?Sized + Send + Sync + 'static,
         F: Fn(ServiceProviderContext) -> Fut + Send + Sync + 'static,
@@ -322,11 +322,11 @@ impl ServiceCollection {
     ///     dependency: Arc<i32>,
     /// }
     ///
-    /// let collection = ServiceCollection::new()
-    ///     .add_singleton::<MyService>();
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_singleton::<MyService>();
     /// ```
     #[cfg(feature = "proc-macro")]
-    pub fn add_singleton<T>(mut self) -> Self
+    pub fn add_singleton<T>(&mut self) -> &mut Self
     where
         T: InjectableExtension,
     {
@@ -356,11 +356,11 @@ impl ServiceCollection {
     ///     dependency: Arc<i32>,
     /// }
     ///
-    /// let collection = ServiceCollection::new()
-    ///     .add_scoped::<MyService>();
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_scoped::<MyService>();
     /// ```
     #[cfg(feature = "proc-macro")]
-    pub fn add_scoped<T>(mut self) -> Self
+    pub fn add_scoped<T>(&mut self) -> &mut Self
     where
         T: InjectableExtension,
     {
@@ -390,11 +390,11 @@ impl ServiceCollection {
     ///     dependency: Arc<i32>,
     /// }
     ///
-    /// let collection = ServiceCollection::new()
-    ///     .add_transient::<MyService>();
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_transient::<MyService>();
     /// ```
     #[cfg(feature = "proc-macro")]
-    pub fn add_transient<T>(mut self) -> Self
+    pub fn add_transient<T>(&mut self) -> &mut Self
     where
         T: InjectableExtension,
     {
@@ -431,11 +431,11 @@ impl ServiceCollection {
     ///     }
     /// }
     ///
-    /// let collection = ServiceCollection::new()
-    ///     .add_singleton_interface::<dyn Logger, ConsoleLogger>();
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_singleton_interface::<dyn Logger, ConsoleLogger>();
     /// ```
     #[cfg(feature = "proc-macro")]
-    pub fn add_singleton_interface<T, TImpl>(mut self) -> Self
+    pub fn add_singleton_interface<T, TImpl>(&mut self) -> &mut Self
     where
         T: ?Sized + Send + Sync + 'static,
         TImpl: InjectableExtension + Unpin + 'static + std::marker::Unsize<T>,
@@ -485,11 +485,11 @@ impl ServiceCollection {
     ///     fn save(&self) {}
     /// }
     ///
-    /// let collection = ServiceCollection::new()
-    ///     .add_scoped_interface::<dyn Repository, DbRepository>();
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_scoped_interface::<dyn Repository, DbRepository>();
     /// ```
     #[cfg(feature = "proc-macro")]
-    pub fn add_scoped_interface<T, TImpl>(mut self) -> Self
+    pub fn add_scoped_interface<T, TImpl>(&mut self) -> &mut Self
     where
         T: ?Sized + Send + Sync + 'static,
         TImpl: InjectableExtension + Unpin + 'static + std::marker::Unsize<T>,
@@ -539,11 +539,11 @@ impl ServiceCollection {
     ///     fn handle(&self) {}
     /// }
     ///
-    /// let collection = ServiceCollection::new()
-    ///     .add_transient_interface::<dyn Handler, RequestHandler>();
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_transient_interface::<dyn Handler, RequestHandler>();
     /// ```
     #[cfg(feature = "proc-macro")]
-    pub fn add_transient_interface<T, TImpl>(mut self) -> Self
+    pub fn add_transient_interface<T, TImpl>(&mut self) -> &mut Self
     where
         T: ?Sized + Send + Sync + 'static,
         TImpl: InjectableExtension + Unpin + 'static + std::marker::Unsize<T>,
@@ -615,11 +615,11 @@ impl ServiceCollection {
 /// use std::sync::Arc;
 ///
 /// # async fn example() {
-/// let provider = ServiceCollection::new()
-///     .add_singleton_with_factory::<i32, _, _>(|_| async {
-///         Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
-///     })
-///     .build();
+/// let mut collection = ServiceCollection::new();
+/// collection.add_singleton_with_factory::<i32, _, _>(|_| async {
+///     Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
+/// });
+/// let provider = collection.build();
 ///
 /// let value: Arc<i32> = provider.get::<i32>().await.unwrap();
 /// # }
@@ -672,11 +672,11 @@ impl ServiceProvider {
     /// use std::sync::Arc;
     ///
     /// # async fn example() {
-    /// let provider = ServiceCollection::new()
-    ///     .add_singleton_with_factory::<i32, _, _>(|_| async {
-    ///         Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
-    ///     })
-    ///     .build();
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_singleton_with_factory::<i32, _, _>(|_| async {
+    ///     Ok(Box::new(42) as Box<dyn std::any::Any + Send + Sync>)
+    /// });
+    /// let provider = collection.build();
     ///
     /// let value: Arc<i32> = provider.get::<i32>().await.unwrap();
     /// assert_eq!(*value, 42);
@@ -764,11 +764,11 @@ impl ServiceProvider {
 /// use std::sync::Arc;
 ///
 /// # async fn example() {
-/// let provider = ServiceCollection::new()
-///     .add_scoped_with_factory::<String, _, _>(|_| async {
-///         Ok(Box::new("scoped".to_string()) as Box<dyn std::any::Any + Send + Sync>)
-///     })
-///     .build();
+/// let mut collection = ServiceCollection::new();
+/// collection.add_scoped_with_factory::<String, _, _>(|_| async {
+///     Ok(Box::new("scoped".to_string()) as Box<dyn std::any::Any + Send + Sync>)
+/// });
+/// let provider = collection.build();
 ///
 /// let scope = provider.create_scope();
 /// let value: Arc<String> = scope.get::<String>().await.unwrap();
@@ -802,11 +802,11 @@ impl ScopedServiceProvider {
     /// use std::sync::Arc;
     ///
     /// # async fn example() {
-    /// let provider = ServiceCollection::new()
-    ///     .add_scoped_with_factory::<String, _, _>(|_| async {
-    ///         Ok(Box::new("scoped".to_string()) as Box<dyn std::any::Any + Send + Sync>)
-    ///     })
-    ///     .build();
+    /// let mut collection = ServiceCollection::new();
+    /// collection.add_scoped_with_factory::<String, _, _>(|_| async {
+    ///     Ok(Box::new("scoped".to_string()) as Box<dyn std::any::Any + Send + Sync>)
+    /// });
+    /// let provider = collection.build();
     ///
     /// let scope = provider.create_scope();
     /// let value1: Arc<String> = scope.get::<String>().await.unwrap();
