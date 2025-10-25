@@ -1,6 +1,8 @@
 # service-rs - An Async Dependency Injection Container for Rust
 
 [<img alt="github" src="https://img.shields.io/badge/github-SFINXVC/service--rs-8da0cb?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/SFINXVC/service-rs)
+[<img alt="crates.io" src="https://img.shields.io/crates/v/service-rs.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/service-rs)
+[<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-service--rs-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/service-rs)
 [<img alt="build status" src="https://img.shields.io/github/actions/workflow/status/SFINXVC/service-rs/rust.yml?branch=main&style=for-the-badge" height="20">](https://github.com/SFINXVC/service-rs/actions?query=branch%3Amain)
 
 An async-first, lightweight dependency injection (DI) container for Rust, inspired by [Microsoft.Extensions.DependencyInjection](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.dependencyinjection) from .NET.
