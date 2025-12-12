@@ -181,13 +181,11 @@ pub fn derive_injectable(input: TokenStream) -> TokenStream {
                             }
                         }
 
-                        pub async fn from_service_provider(provider: std::sync::Arc<service_rs::ServiceProvider>) -> Self {
+                        pub async fn from_service_provider(provider: std::sync::Arc<service_rs::ServiceProvider>) -> Result<Self, service_rs::ServiceError> {
                             #(
-                                let #field_idents = provider.get::<#inner_types>().await
-                                    .map_err(|e| format!("Failed to resolve dependency for {}: {}", stringify!(#name), e))
-                                    .expect("Dependency resolution failed");
+                                let #field_idents = provider.get::<#inner_types>().await?;
                             )*
-                            #name::new(#(#field_idents),*)
+                            Ok(#name::new(#(#field_idents),*))
                         }
                     }
 
