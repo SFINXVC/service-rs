@@ -1,6 +1,6 @@
 [package]
 name = "service-rs"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 authors = ["SFINXVC"]
 description = "An async-first, lightweight dependency injection container for Rust"
@@ -18,7 +18,7 @@ all-features = true
 [dependencies]
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-service-rs_proc-macro = { version = "0.1.1", path = "../service-rs_proc-macro", optional = true }
+service-rs_proc-macro = { version = "0.1.2", path = "../service-rs_proc-macro", optional = true }
 
 [features]
 default = ["proc-macro"]
