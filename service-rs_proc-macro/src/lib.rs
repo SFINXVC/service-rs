@@ -180,6 +180,15 @@ pub fn derive_injectable(input: TokenStream) -> TokenStream {
                                 #(#inits),*
                             }
                         }
+
+                        pub async fn from_service_provider(provider: std::sync::Arc<service_rs::ServiceProvider>) -> Self {
+                            #(
+                                let #field_idents = provider.get::<#inner_types>().await
+                                    .map_err(|e| format!("Failed to resolve dependency for {}: {}", stringify!(#name), e))
+                                    .expect("Dependency resolution failed");
+                            )*
+                            #name::new(#(#field_idents),*)
+                        }
                     }
 
                     impl service_rs::InjectableExtension for #name {
@@ -196,34 +205,6 @@ pub fn derive_injectable(input: TokenStream) -> TokenStream {
                             })
                         }
                     }
-
-                    impl From<std::sync::Arc<service_rs::ServiceProvider>> for #name {
-                        fn from(provider: std::sync::Arc<service_rs::ServiceProvider>) -> Self {
-                            let fut = async move {
-                                #(
-                                    let #field_idents = provider.get::<#inner_types>().await
-                                        .map_err(|e| format!("Failed to resolve dependency for {}: {}", stringify!(#name), e))
-                                        .expect("Dependency resolution failed");
-                                )*
-                                #name::new(#(#field_idents),*)
-                            };
-
-                            match tokio::runtime::Handle::try_current() {
-                                Ok(handle) => {
-                                    tokio::task::block_in_place(|| {
-                                        handle.block_on(fut)
-                                    })
-                                }
-                                Err(_) => {
-                                    tokio::runtime::Builder::new_current_thread()
-                                        .enable_all()
-                                        .build()
-                                        .expect("Failed to create temporary runtime")
-                                        .block_on(fut)
-                                }
-                            }
-                        }
-                    }
                 }
             }
             syn::Fields::Unit => {
@@ -231,6 +212,10 @@ pub fn derive_injectable(input: TokenStream) -> TokenStream {
                     impl #name {
                         pub fn new() -> Self {
                             Self
+                        }
+
+                        pub async fn from_service_provider(_provider: std::sync::Arc<service_rs::ServiceProvider>) -> Self {
+                            #name::new()
                         }
                     }
 
@@ -241,12 +226,6 @@ pub fn derive_injectable(input: TokenStream) -> TokenStream {
                                     Ok(Box::new(#name::new()) as Box<dyn std::any::Any + Send + Sync>)
                                 })
                             })
-                        }
-                    }
-
-                    impl From<std::sync::Arc<service_rs::ServiceProvider>> for #name {
-                        fn from(_provider: std::sync::Arc<service_rs::ServiceProvider>) -> Self {
-                            #name::new()
                         }
                     }
                 }
