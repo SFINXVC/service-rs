@@ -450,8 +450,7 @@ impl ServiceCollection {
                 Box::pin(async move {
                     let concrete = impl_factory(ctx).await?;
                     let downcasted = concrete.downcast::<TImpl>().map_err(|_| {
-                        Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        Box::new(std::io::Error::other(
                             "Failed to downcast",
                         )) as Box<dyn std::error::Error>
                     })?;
@@ -504,8 +503,7 @@ impl ServiceCollection {
                 Box::pin(async move {
                     let concrete = impl_factory(ctx).await?;
                     let downcasted = concrete.downcast::<TImpl>().map_err(|_| {
-                        Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        Box::new(std::io::Error::other(
                             "Failed to downcast",
                         )) as Box<dyn std::error::Error>
                     })?;
@@ -558,8 +556,7 @@ impl ServiceCollection {
                 Box::pin(async move {
                     let concrete = impl_factory(ctx).await?;
                     let downcasted = concrete.downcast::<TImpl>().map_err(|_| {
-                        Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        Box::new(std::io::Error::other(
                             "Failed to downcast",
                         )) as Box<dyn std::error::Error>
                     })?;
@@ -753,7 +750,7 @@ impl ServiceProvider {
                     type_name: std::any::type_name::<T>(),
                 })
             },
-            |service| Ok(service),
+            Ok,
         )?;
 
         match descriptor.lifetime {
@@ -781,11 +778,11 @@ impl ServiceProvider {
                     .await
                     .insert(type_id, Arc::clone(&arc_service));
 
-                return arc_service.downcast::<T>().map_err(|_| {
+                arc_service.downcast::<T>().map_err(|_| {
                     ServiceError::ServiceResolutionFailed {
                         type_name: std::any::type_name::<T>(),
                     }
-                });
+                })
             }
             ServiceLifetime::Scoped => Err(ServiceError::ServiceInvalidScope {
                 type_name: std::any::type_name::<T>(),
@@ -800,11 +797,11 @@ impl ServiceProvider {
 
                 let arc_service: Arc<dyn Any + Send + Sync> = Arc::from(service);
 
-                return arc_service.downcast::<T>().map_err(|_| {
+                arc_service.downcast::<T>().map_err(|_| {
                     ServiceError::ServiceResolutionFailed {
                         type_name: std::any::type_name::<T>(),
                     }
-                });
+                })
             }
         }
     }
@@ -890,7 +887,7 @@ impl ScopedServiceProvider {
                         type_name: std::any::type_name::<T>(),
                     })
                 },
-                |service| Ok(service),
+                Ok,
             )?;
 
         match descriptor.lifetime {
@@ -920,11 +917,11 @@ impl ScopedServiceProvider {
                     .await
                     .insert(type_id, Arc::clone(&arc_service));
 
-                return arc_service.downcast::<T>().map_err(|_| {
+                arc_service.downcast::<T>().map_err(|_| {
                     ServiceError::ServiceResolutionFailed {
                         type_name: std::any::type_name::<T>(),
                     }
-                });
+                })
             }
             ServiceLifetime::Transient => self.provider.get::<T>().await,
         }
